@@ -4,6 +4,8 @@ from pydantic import BaseModel, EmailStr
 import psycopg
 from dotenv import load_dotenv
 from auth.Hashing import hash_password
+from auth.key_generator import generar_par_llaves
+from datetime import datetime
 
 load_dotenv()
 
@@ -32,6 +34,8 @@ def registrar(usuario: Usuario):
 
     password = hash_password(usuario.contrasenas)
 
+    public, private = generar_par_llaves(usuario.contrasenas)
+
     with conn.cursor() as cur:
         
         # verificar si ya existe
@@ -41,8 +45,8 @@ def registrar(usuario: Usuario):
         
         # insertar usuario
         cur.execute(
-            "INSERT INTO users (name, email, contrasenas) VALUES (%s, %s, %s);",
-            (usuario.name, usuario.email, password)
+            "INSERT INTO users (name, email, contrasenas, public_key, encrypted_private_key  ) VALUES (%s, %s, %s);",
+            (usuario.name, usuario.email, password, public, private, datetime.utcnow())
         )
         conn.commit()
 
