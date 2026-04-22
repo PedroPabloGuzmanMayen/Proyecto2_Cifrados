@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr
 import psycopg
 from dotenv import load_dotenv
+from auth.Hashing import hash_password
 
 load_dotenv()
 
@@ -27,6 +28,10 @@ class Usuario(BaseModel):
 # 🚀 Endpoint
 @app.post("/registro")
 def registrar(usuario: Usuario):
+
+
+    password = hash_password(usuario.contrasenas)
+
     with conn.cursor() as cur:
         
         # verificar si ya existe
@@ -37,7 +42,7 @@ def registrar(usuario: Usuario):
         # insertar usuario
         cur.execute(
             "INSERT INTO users (name, email, contrasenas) VALUES (%s, %s, %s);",
-            (usuario.name, usuario.email, usuario.contrasenas)
+            (usuario.name, usuario.email, password)
         )
         conn.commit()
 
