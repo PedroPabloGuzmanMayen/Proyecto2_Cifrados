@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 app = FastAPI()
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 #CORS
 
 app.add_middleware(
@@ -37,6 +37,15 @@ def crear_token(user_id: int, email: str) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
+
+def verificar_token(token: str = Depends(oauth2_scheme)) -> dict:
+    try:
+        payload = jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
 
 # 🔌 Conexión
 _conn = None
@@ -102,7 +111,9 @@ def login(credenciales: Usuario_Login):
     if result is None:
         raise HTTPException(status_code=400, detail="usuario no existe :(")
     
-    user_id, email, hashed_password = result
+    user_id = result["id"]
+    email = result["email"]
+    hashed_password = result["contrasenas"]
 
     if not verify_password(credenciales.contrasena, hashed_password):
         raise HTTPException(status_code=400, detail="Contraseña incorrecta >:()")
@@ -113,3 +124,13 @@ def login(credenciales: Usuario_Login):
         "access_token": token,
         "token_type": "bearer"
     }
+
+@app.get("/users/{user_id}/key")
+def obtener_llave_publica(user_id: int):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT public_key FROM users WHERE id = %s;", (user_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"user_id": user_id, "public_key": row["public_key"]}
