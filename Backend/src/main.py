@@ -7,15 +7,18 @@ from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from auth.Hashing import hash_password, verify_password
 from auth.key_generator import generar_par_llaves
+from crypto.hybrid_cipher import cifrar_mensaje
 from datetime import datetime, timezone, timedelta
 import jwt
 from fastapi.middleware.cors import CORSMiddleware
+import requests
 
 load_dotenv()
 
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 #CORS
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +30,7 @@ app.add_middleware(
 secret = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60
-
+BASE_URL_REQUEST = os.environ.get("URI")
 # JWT
 def crear_token(user_id: int, email: str) -> str:
     payload = {
@@ -72,6 +75,11 @@ class Usuario(BaseModel):
 class Usuario_Login(BaseModel):
     email: str
     contrasena:str
+
+class mensaje_model(BaseModel):
+    sender: int
+    recipient: int
+    message: str
 
 
 # 🚀 Endpoint
@@ -134,3 +142,39 @@ def obtener_llave_publica(user_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return {"user_id": user_id, "public_key": row["public_key"]}
+
+#Mensaje individual
+@app.post("/individual_message/")
+def send_message(mensaje: mensaje_model):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT public_key FROM users WHERE id = %s;", (mensaje.recipient,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="El usuario al que le quieres enviar un mensaje no existe")
+
+    encrypted_data = cifrar_mensaje(mensaje.message, row["public_key"])
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO messages (sender_id, recipient_id, ciphertext, encrypted_key, nonce, auth_tag)
+            VALUES (%s, %s, %s, %s, %s, %s);
+            """,
+            (
+                mensaje.sender,
+                mensaje.recipient,
+                encrypted_data["ciphertext"],
+                encrypted_data["encrypted_key"],
+                encrypted_data["nonce"],
+                encrypted_data["auth_tag"],
+            )
+        )
+        conn.commit()
+
+    return {"ok": True, "message": "mensaje enviado con éxito"}
+
+
+@app.post("/group_message")
+def send_message_to_group():
+    pass
