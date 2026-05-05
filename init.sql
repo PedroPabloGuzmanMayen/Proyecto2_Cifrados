@@ -26,15 +26,11 @@ CREATE TABLE IF NOT EXISTS messages (
     auth_tag VARCHAR(24) NOT NULL,
     signature TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT chk_recipient_xor_group CHECK (
-        (recipient_id IS NOT NULL AND group_id IS NULL) OR
-        (recipient_id IS NULL AND group_id IS NOT NULL)
-    )
 );
 
 
 CREATE TABLE IF NOT EXISTS group_members (
-    id_user INT REFERENCES users(id),
-    id_group INT REFERENCES groups(id)
+    id_user INT NOT NULL REFERENCES users(id),
+    id_group INT NOT NULL REFERENCES groups(id),
+    CONSTRAINT uq_group_member UNIQUE (id_user, id_group)
 );
