@@ -274,5 +274,48 @@ def decrypt_message(user_id: int, message_id: int, body: DecryptRequest):
 
 
 @app.post("/group_message")
-def send_message_to_group():
-    pass
+def send_message_to_group(mensaje: mensaje_model):
+
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM groups WHERE id = %s;", (mensaje.recipient,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="El grupo al que le quieres enviar un mensaje no existe")
+    
+    with conn.cursor() as cur:
+        cur.execute("SELECT id_user FROM group_members WHERE id_group = %s;", (mensaje.recipient,))
+        row = cur.fetchall()
+    if not row:
+        raise HTTPException(status_code=404, detail="Error, no hay usuarios en el grupo")
+    
+    public_keys = []
+    for i in row:
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT public_key FROM users WHERE id = %s;", (i['id'],))
+            result = cur.fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail="El grupo al que le quieres enviar un mensaje no existe")
+        public_keys.append({'user_id': i['id'], 'public_key': result['public_key']})
+
+    for i in public_keys:
+        encrypted_data = cifrar_mensaje(mensaje.message, i["public_key"])
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO messages (sender_id, recipient_id, group_id, ciphertext, encrypted_key, nonce, auth_tag)
+                VALUES (%s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    mensaje.sender,
+                    i['id'],
+                    mensaje.recipient,
+                    encrypted_data["ciphertext"],
+                    encrypted_data["encrypted_key"],
+                    encrypted_data["nonce"],
+                    encrypted_data["auth_tag"],
+                )
+            )
+            conn.commit()
+    return {"ok": True, "message": "mensaje enviado con éxito"}
