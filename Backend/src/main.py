@@ -87,6 +87,14 @@ class mensaje_model(BaseModel):
     message: str
 
 
+class GrupoCreate(BaseModel):
+    name: str
+    miembros: list[int]
+
+class AgregarMiembro(BaseModel):
+    user_id: int
+
+
 class DecryptRequest(BaseModel):
     """
     Para descifrar mensajes el cliente envía su contraseña (nunca se almacena).
@@ -293,11 +301,11 @@ def send_message_to_group(mensaje: mensaje_model):
     for i in row:
 
         with conn.cursor() as cur:
-            cur.execute("SELECT public_key FROM users WHERE id = %s;", (i['id'],))
+            cur.execute("SELECT public_key FROM users WHERE id = %s;", (i['id_user'],))
             result = cur.fetchone()
         if not result:
             raise HTTPException(status_code=404, detail="El grupo al que le quieres enviar un mensaje no existe")
-        public_keys.append({'user_id': i['id'], 'public_key': result['public_key']})
+        public_keys.append({'user_id': i['id_user'], 'public_key': result['public_key']})
 
     for i in public_keys:
         encrypted_data = cifrar_mensaje(mensaje.message, i["public_key"])
@@ -305,11 +313,11 @@ def send_message_to_group(mensaje: mensaje_model):
             cur.execute(
                 """
                 INSERT INTO messages (sender_id, recipient_id, group_id, ciphertext, encrypted_key, nonce, auth_tag)
-                VALUES (%s, %s, %s, %s, %s, %s);
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
                     mensaje.sender,
-                    i['id'],
+                    i['user_id'],
                     mensaje.recipient,
                     encrypted_data["ciphertext"],
                     encrypted_data["encrypted_key"],
@@ -319,3 +327,71 @@ def send_message_to_group(mensaje: mensaje_model):
             )
             conn.commit()
     return {"ok": True, "message": "mensaje enviado con éxito"}
+
+@app.post("/groups")
+def crear_grupo(grupo: GrupoCreate):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM users WHERE id = ANY(%s);",
+            (grupo.miembros,)
+        )
+        encontrados = {row["id"] for row in cur.fetchall()}
+
+    faltantes = set(grupo.miembros) - encontrados
+    if faltantes:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Usuarios no encontrados: {sorted(faltantes)}"
+        )
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO groups (name) VALUES (%s) RETURNING id;",
+            (grupo.name,)
+        )
+        group_id = cur.fetchone()["id"]
+
+        if grupo.miembros:
+            cur.executemany(
+                "INSERT INTO group_members (id_user, id_group) VALUES (%s, %s);",
+                [(uid, group_id) for uid in grupo.miembros]
+            )
+
+        conn.commit()
+
+    return {"ok": True, "group_id": group_id, "name": grupo.name, "miembros": grupo.miembros}
+
+
+@app.post("/groups/{group_id}/members")
+def agregar_miembro(group_id: int, body: AgregarMiembro):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+
+        cur.execute("SELECT id FROM groups WHERE id = %s;", (group_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Grupo no encontrado")
+
+        cur.execute("SELECT id FROM users WHERE id = %s;", (body.user_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        cur.execute(
+            """
+            INSERT INTO group_members (id_user, id_group)
+            VALUES (%s, %s)
+            ON CONFLICT ON CONSTRAINT uq_group_member DO NOTHING
+            RETURNING id_user;
+            """,
+            (body.user_id, group_id)
+        )
+        inserted = cur.fetchone()
+        conn.commit()
+
+    if not inserted:
+        raise HTTPException(status_code=400, detail="El usuario ya es miembro del grupo")
+
+    return {"ok": True, "group_id": group_id, "user_id": body.user_id}
+
