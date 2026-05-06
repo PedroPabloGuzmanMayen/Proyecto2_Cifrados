@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS groups (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) NOT NULL UNIQUE
 );
 
 
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
     nonce VARCHAR(24) NOT NULL,
     auth_tag VARCHAR(24) NOT NULL,
     signature TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 
