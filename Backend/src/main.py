@@ -9,6 +9,8 @@ from auth.Hashing import hash_password, verify_password
 from auth.key_generator import generar_par_llaves, cargar_llave_privada
 from crypto.hybrid_cipher import cifrar_mensaje
 from crypto.hybrid_decypher import descifrar_mensaje
+from signatures.signer import firmar_mensaje
+from signatures.verifier import verificar_firma, SignatureInvalidError
 from datetime import datetime, timezone, timedelta
 import jwt
 from fastapi.middleware.cors import CORSMiddleware
@@ -85,6 +87,7 @@ class mensaje_model(BaseModel):
     sender: int
     recipient: int
     message: str
+    sender_password: str
 
 
 class GrupoCreate(BaseModel):
@@ -166,13 +169,25 @@ def send_message(mensaje: mensaje_model):
     if not row:
         raise HTTPException(status_code=404, detail="Destinatario no encontrado")
 
+    with conn.cursor() as cur:
+        cur.execute("SELECT encrypted_private_key FROM users WHERE id = %s;", (mensaje.sender,))
+        sender_row = cur.fetchone()
+    if not sender_row:
+        raise HTTPException(status_code=404, detail="Remitente no encontrado")
+
+    try:
+        private_key_sender = cargar_llave_privada(mensaje.sender_password, sender_row["encrypted_private_key"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+
+    firma_b64 = firmar_mensaje(mensaje.message, private_key_sender)
     encrypted_data = cifrar_mensaje(mensaje.message, row["public_key"])
 
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO messages (sender_id, recipient_id, ciphertext, encrypted_key, nonce, auth_tag)
-            VALUES (%s, %s, %s, %s, %s, %s);
+            INSERT INTO messages (sender_id, recipient_id, ciphertext, encrypted_key, nonce, auth_tag, signature)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
             """,
             (
                 mensaje.sender,
@@ -181,6 +196,7 @@ def send_message(mensaje: mensaje_model):
                 encrypted_data["encrypted_key"],
                 encrypted_data["nonce"],
                 encrypted_data["auth_tag"],
+                firma_b64,
             ),
         )
         conn.commit()
@@ -395,3 +411,66 @@ def agregar_miembro(group_id: int, body: AgregarMiembro):
 
     return {"ok": True, "group_id": group_id, "user_id": body.user_id}
 
+# Módulo 3: Verificación de firma
+class VerifyRequest(BaseModel):
+    password: str
+
+@app.post("/messages/{msg_id}/verify")
+def verify_message_signature(msg_id: int, body: VerifyRequest):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.ciphertext, m.encrypted_key, m.nonce, m.auth_tag,
+                   m.signature, m.sender_id,
+                   u_sender.public_key AS sender_public_key,
+                   u_recipient.encrypted_private_key AS recipient_encrypted_private_key
+            FROM messages m
+            JOIN users u_sender    ON u_sender.id    = m.sender_id
+            JOIN users u_recipient ON u_recipient.id = m.recipient_id
+            WHERE m.id = %s;
+            """,
+            (msg_id,),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Mensaje no encontrado")
+
+    if not row["signature"]:
+        raise HTTPException(status_code=400, detail="Este mensaje no tiene firma digital")
+
+    try:
+        private_key_recipient = cargar_llave_privada(body.password, row["recipient_encrypted_private_key"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+
+    try:
+        plaintext = descifrar_mensaje(
+            {
+                "ciphertext":    row["ciphertext"],
+                "encrypted_key": row["encrypted_key"],
+                "nonce":         row["nonce"],
+                "auth_tag":      row["auth_tag"],
+            },
+            private_key_recipient,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="No se pudo descifrar el mensaje")
+
+    try:
+        verificar_firma(plaintext, row["signature"], row["sender_public_key"])
+        verified = True
+        detail = "Firma válida: el mensaje es auténtico."
+    except SignatureInvalidError as e:
+        verified = False
+        detail = f"FIRMA INVÁLIDA: {str(e)}"
+
+    return {
+        "message_id": msg_id,
+        "sender_id":  row["sender_id"],
+        "verified":   verified,
+        "detail":     detail,
+        "plaintext":  plaintext if verified else None,
+    }
