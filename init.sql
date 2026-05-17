@@ -34,3 +34,16 @@ CREATE TABLE IF NOT EXISTS group_members (
     id_group INT NOT NULL REFERENCES groups(id),
     CONSTRAINT uq_group_member UNIQUE (id_user, id_group)
 );
+
+
+CREATE TABLE IF NOT EXISTS blockchain (
+    id            SERIAL PRIMARY KEY,
+    index         INT          NOT NULL UNIQUE,
+    timestamp     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    sender_id     INT          NOT NULL REFERENCES users(id),
+    recipient_id  INT          NOT NULL REFERENCES users(id),
+    message_hash  TEXT         NOT NULL,
+    previous_hash CHAR(64)     NOT NULL,
+    nonce         INT          NOT NULL,
+    hash          CHAR(64)     NOT NULL UNIQUE
+);
