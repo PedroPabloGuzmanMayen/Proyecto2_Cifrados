@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 
 CREATE TABLE IF NOT EXISTS blockchain (
     id            SERIAL PRIMARY KEY,
-    index         INT          NOT NULL UNIQUE,
+    block_index   SERIAL UNIQUE,
     timestamp     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     sender_id     INT          NOT NULL REFERENCES users(id),
     recipient_id  INT          NOT NULL REFERENCES users(id),
@@ -47,3 +47,20 @@ CREATE TABLE IF NOT EXISTS blockchain (
     nonce         INT          NOT NULL,
     hash          CHAR(64)     NOT NULL UNIQUE
 );
+
+INSERT INTO users (
+    id,
+    name,
+    email,
+    contrasenas,
+    public_key,
+    encrypted_private_key
+)
+VALUES (
+    'Genesis',
+    'genesis@system.local',
+    '',
+    '',
+    ''
+)
+ON CONFLICT (id) DO NOTHING;

@@ -10,7 +10,7 @@ def mine_block(block: Block) -> Block:
     empiece con DIFFICULTY ceros (proof-of-work simplificado).
     Retorna el bloque con nonce y hash finales asignados.
     """
-    block.nonce = 0
+    block.nonce = 2
     candidate = block.compute_hash()
 
     while not candidate.startswith(PREFIX):

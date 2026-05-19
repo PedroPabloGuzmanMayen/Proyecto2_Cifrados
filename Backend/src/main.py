@@ -14,19 +14,14 @@ from signatures.verifier import verificar_firma, SignatureInvalidError
 from datetime import datetime, timezone, timedelta
 import jwt
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from blockchain.chain import Blockchain
 
 load_dotenv()
 
-app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+blockchain = Blockchain()
 secret = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60
@@ -105,6 +100,45 @@ class DecryptRequest(BaseModel):
     y el blob cifrado que sí está en la BD.
     """
     password: str
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Iniciando servidor...")
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM blockchain;")
+        result = cur.fetchone()
+    
+    if result is None:
+        genesis = blockchain.create_genesis_block()
+
+        try: 
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO blockchain (sender_id, recipient_id, message_hash, previous_hash, nonce, hash)" \
+                "VALUES (%s, %s, %s, %s, %s, %s);", (genesis.data["sender_id"], genesis.data["recipient_id"], 
+                                                    genesis.data["message_hash"], genesis.previous_hash,
+                                                    genesis.nonce, genesis.hash
+                                                    ))
+                conn.commit()
+
+        except Exception:
+            raise HTTPException(status_code=400, detail="Contraseña incorrecta") 
+
+    print("Startup terminado")
+
+    yield  
+
+    print("Apagando servidor...")
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
