@@ -560,3 +560,54 @@ def verify_message_signature(msg_id: int, body: VerifyRequest):
         "detail":     detail,
         "plaintext":  plaintext if verified else None,
     }
+
+
+@app.get("/blockchain/verify")
+def verify_blockchain():
+
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+
+        cur.execute("""
+            SELECT block_index, hash, previous_hash
+            FROM blockchain
+            ORDER BY block_index ASC;
+        """)
+
+        blocks = cur.fetchall()
+
+    if not blocks:
+        return {
+            "valid": False,
+            "detail": "Blockchain vacía"
+        }
+
+
+    genesis = blocks[0]
+
+    if genesis["previous_hash"] != "0" * 64:
+        return {
+            "valid": False,
+            "detail": "Genesis block inválido"
+        }
+
+    for i in range(1, len(blocks)):
+
+        current_block = blocks[i]
+        previous_block = blocks[i - 1]
+
+        if current_block["previous_hash"] != previous_block["hash"]:
+
+            return {
+                "valid": False,
+                "detail": (
+                    f"Bloque {current_block['block_index']} "
+                    f"no apunta correctamente al bloque anterior"
+                )
+            }
+
+    return {
+        "valid": True,
+        "detail": "Blockchain válida"
+    }
