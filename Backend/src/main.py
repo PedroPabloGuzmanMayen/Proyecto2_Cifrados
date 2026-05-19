@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from auth.Hashing import hash_password, verify_password
 from auth.key_generator import generar_par_llaves, cargar_llave_privada
-from crypto.hybrid_cipher import cifrar_mensaje
+from crypto.hybrid_cipher import cifrar_mensaje, generar_llave_aes
 from crypto.hybrid_decypher import descifrar_mensaje
 from signatures.signer import firmar_mensaje
 from signatures.verifier import verificar_firma, SignatureInvalidError
@@ -162,6 +162,7 @@ def obtener_llave_publica(user_id: int):
 
 @app.post("/individual_message/")
 def send_message(mensaje: mensaje_model):
+    aes_key = generar_llave_aes()
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute("SELECT public_key FROM users WHERE id = %s;", (mensaje.recipient,))
@@ -181,7 +182,7 @@ def send_message(mensaje: mensaje_model):
         raise HTTPException(status_code=400, detail="Contraseña incorrecta")
 
     firma_b64 = firmar_mensaje(mensaje.message, private_key_sender)
-    encrypted_data = cifrar_mensaje(mensaje.message, row["public_key"])
+    encrypted_data = cifrar_mensaje(mensaje.message, row["public_key"], aes_key)
 
     with conn.cursor() as cur:
         cur.execute(
@@ -298,8 +299,9 @@ def decrypt_message(user_id: int, message_id: int, body: DecryptRequest):
 
 
 @app.post("/group_message")
-def send_message_to_group(mensaje: mensaje_model):
 
+def send_message_to_group(mensaje: mensaje_model):
+    aes_key = generar_llave_aes()
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM groups WHERE id = %s;", (mensaje.recipient,))
@@ -324,7 +326,7 @@ def send_message_to_group(mensaje: mensaje_model):
         public_keys.append({'user_id': i['id_user'], 'public_key': result['public_key']})
 
     for i in public_keys:
-        encrypted_data = cifrar_mensaje(mensaje.message, i["public_key"])
+        encrypted_data = cifrar_mensaje(mensaje.message, i["public_key"], aes_key)
         with conn.cursor() as cur:
             cur.execute(
                 """

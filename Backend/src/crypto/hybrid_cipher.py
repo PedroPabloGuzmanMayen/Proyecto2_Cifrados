@@ -6,15 +6,11 @@ from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Hash import SHA256
 
 
-def cifrar_mensaje(plaintext: str, public_key_pem: str) -> dict:
+def cifrar_mensaje(plaintext: str, public_key_pem: str, aes_key: bytes) -> dict:
     """
     Criterio 1: Cifrado AES-256-GCM con nonce único por mensaje
     Criterio 2: Clave AES cifrada con RSA-OAEP
     """
-
-    # Clave AES-256 efímera (32 bytes = 256 bits)
-    aes_key = os.urandom(32)
-
     # Nonce único
     nonce = os.urandom(16)
 
@@ -34,3 +30,6 @@ def cifrar_mensaje(plaintext: str, public_key_pem: str) -> dict:
         "auth_tag":      base64.b64encode(auth_tag).decode("utf-8"),
         "timestamp":     datetime.now(timezone.utc).isoformat(),
     }
+
+def generar_llave_aes() -> bytes:
+    return os.urandom(32)
