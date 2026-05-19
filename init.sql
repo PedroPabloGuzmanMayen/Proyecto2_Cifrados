@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS blockchain (
 );
 
 INSERT INTO users (
-    id,
     name,
     email,
     contrasenas,
