@@ -1,0 +1,37 @@
+{
+  "base_url": "http://localhost:8000",
+  "users": [
+    {
+      "id": 2,
+      "name": "Alice López",
+      "email": "alice@vaultchain.dev",
+      "password": "AlicePass123!"
+    },
+    {
+      "id": 3,
+      "name": "Bob Martínez",
+      "email": "bob@vaultchain.dev",
+      "password": "BobPass456!"
+    },
+    {
+      "id": 4,
+      "name": "Carol Jiménez",
+      "email": "carol@vaultchain.dev",
+      "password": "CarolPass789!"
+    }
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "name": "Grupo Alpha"
+    },
+    {
+      "id": 2,
+      "name": "Grupo Beta"
+    },
+    {
+      "id": 3,
+      "name": "Grupo General"
+    }
+  ]
+}

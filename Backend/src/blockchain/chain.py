@@ -5,32 +5,37 @@ from .pow import mine_block
 GENESIS_PREV_HASH = "0" * 64
 
 
-class Blockchain:
+class Blockchain():
+
+    def __init__(self):
+        self.prev_hash = ""
+        self.index_counter = 1
 
     # ─── Genesis ─────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def create_genesis_block() -> Block:
+    def create_genesis_block(self) -> Block:
         """
         Crea el bloque génesis con previous_hash = "0" * 64.
         Los datos de la transacción son vacíos porque no corresponde
         a ningún mensaje real.
         """
         genesis = Block(
-            index=1,
+            index=self.index_counter,
             timestamp=datetime.now(timezone.utc).isoformat(),
             data={"sender_id": 1, "recipient_id": 1, "message_hash": "genesis"},
             previous_hash=GENESIS_PREV_HASH,
-            nonce=2,
+            nonce=0,
         )
-        return mine_block(genesis)
+        new_block = mine_block(genesis)
+        self.index_counter +=1
+        self.prev_hash = new_block.hash
+        
+        return new_block
 
     # ─── Nuevo bloque ────────────────────────────────────────────────────────
 
-    @staticmethod
     def create_next_block(
-        index: int,
-        previous_hash: str,
+        self,
         sender_id: int,
         recipient_id: int,
         message_hash: str,
@@ -49,22 +54,26 @@ class Blockchain:
             Block minado con hash válido.
         """
         block = Block(
-            index=index,
+            index=self.index_counter,
             timestamp=datetime.now(timezone.utc).isoformat(),
             data={
                 "sender_id":    sender_id,
                 "recipient_id": recipient_id,
                 "message_hash": message_hash,
             },
-            previous_hash=previous_hash,
+            previous_hash=self.prev_hash,
             nonce=0,
         )
-        return mine_block(block)
+        new_block = mine_block(block)
+        self.prev_hash = new_block.hash
+        self.index_counter +=1
+
+        return new_block
 
     # ─── Validación ──────────────────────────────────────────────────────────
 
     @staticmethod
-    def is_chain_valid(blocks: list[Block]) -> tuple[bool, str]:
+    def is_chain_valid(self, blocks: list[Block]) -> tuple[bool, str]:
         """
         Recorre la cadena completa verificando:
           1. El hash almacenado coincide con el hash recalculado.

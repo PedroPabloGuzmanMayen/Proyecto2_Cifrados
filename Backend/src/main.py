@@ -16,6 +16,7 @@ import jwt
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from blockchain.chain import Blockchain
+from Crypto.Hash import SHA256
 
 load_dotenv()
 
@@ -46,6 +47,7 @@ def verificar_token(token: str = Depends(oauth2_scheme)) -> dict:
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
+
 
 
 # ─── Conexión ────────────────────────────────────────────────────────────────
@@ -107,7 +109,7 @@ async def lifespan(app: FastAPI):
     print("Iniciando servidor...")
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute("SELECT * FROM blockchain;")
+        cur.execute("SELECT block_index, hash FROM blockchain ORDER BY block_index DESC LIMIT 1;")
         result = cur.fetchone()
     
     if result is None:
@@ -123,7 +125,12 @@ async def lifespan(app: FastAPI):
                 conn.commit()
 
         except Exception:
-            raise HTTPException(status_code=400, detail="Contraseña incorrecta") 
+            conn.rollback()
+            raise HTTPException(status_code=500, detail="server error")
+    else:
+        blockchain.index_counter = result["block_index"] + 1
+        blockchain.prev_hash = result["hash"]
+        
 
     print("Startup terminado")
 
@@ -139,6 +146,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def insert_into_the_blockchain(sender_id: int, recipient_id: int, message_hash: str):
+    
+    new_block = blockchain.create_next_block(sender_id, recipient_id, message_hash)
+    conn = get_conn()
+    try: 
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO blockchain (sender_id, recipient_id, message_hash, previous_hash, nonce, hash)" \
+            "VALUES (%s, %s, %s, %s, %s, %s);", (sender_id, recipient_id, 
+                                                message_hash, new_block.previous_hash,
+                                                new_block.nonce, new_block.hash
+                                                ))
+            conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="server error")
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -216,6 +240,8 @@ def send_message(mensaje: mensaje_model):
         raise HTTPException(status_code=400, detail="Contraseña incorrecta")
 
     firma_b64 = firmar_mensaje(mensaje.message, private_key_sender)
+
+
     encrypted_data = cifrar_mensaje(mensaje.message, row["public_key"], aes_key)
 
     with conn.cursor() as cur:
@@ -235,6 +261,10 @@ def send_message(mensaje: mensaje_model):
             ),
         )
         conn.commit()
+
+    mensaje_hash = SHA256.new(mensaje.message.encode("utf-8"))
+
+    insert_into_the_blockchain(mensaje.sender, mensaje.recipient, mensaje_hash)
 
     return {"ok": True, "message": "Mensaje enviado con éxito"}
 
@@ -349,6 +379,19 @@ def send_message_to_group(mensaje: mensaje_model):
     if not row:
         raise HTTPException(status_code=404, detail="Error, no hay usuarios en el grupo")
     
+    with conn.cursor() as cur:
+        cur.execute("SELECT encrypted_private_key FROM users WHERE id = %s;", (mensaje.sender,))
+        sender_row = cur.fetchone()
+    if not sender_row:
+        raise HTTPException(status_code=404, detail="Remitente no encontrado")
+
+    try:
+        private_key_sender = cargar_llave_privada(mensaje.sender_password, sender_row["encrypted_private_key"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+
+    firma_b64 = firmar_mensaje(mensaje.message, private_key_sender)
+    
     public_keys = []
     for i in row:
 
@@ -364,8 +407,8 @@ def send_message_to_group(mensaje: mensaje_model):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO messages (sender_id, recipient_id, group_id, ciphertext, encrypted_key, nonce, auth_tag)
-                VALUES (%s, %s, %s, %s, %s, %s, %s);
+                INSERT INTO messages (sender_id, recipient_id, group_id, ciphertext, encrypted_key, nonce, auth_tag, signature)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                 """,
                 (
                     mensaje.sender,
@@ -375,9 +418,16 @@ def send_message_to_group(mensaje: mensaje_model):
                     encrypted_data["encrypted_key"],
                     encrypted_data["nonce"],
                     encrypted_data["auth_tag"],
+                    firma_b64
                 )
             )
             conn.commit()
+
+
+        mensaje_hash = SHA256.new(mensaje.message.encode("utf-8"))
+
+        insert_into_the_blockchain(mensaje.sender, mensaje.recipient, mensaje_hash)
+
     return {"ok": True, "message": "mensaje enviado con éxito"}
 
 @app.post("/groups")
