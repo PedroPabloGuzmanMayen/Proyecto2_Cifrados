@@ -9,7 +9,7 @@ from auth.Hashing import hash_password, verify_password
 from auth.key_generator import generar_par_llaves, cargar_llave_privada
 from crypto.hybrid_cipher import cifrar_mensaje, generar_llave_aes
 from crypto.hybrid_decypher import descifrar_mensaje
-from signatures.signer import firmar_mensaje
+from signatures.signer import firmar_mensaje, obtener_hash_mensaje
 from signatures.verifier import verificar_firma, SignatureInvalidError
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -262,7 +262,7 @@ def send_message(mensaje: mensaje_model):
         )
         conn.commit()
 
-    mensaje_hash = SHA256.new(mensaje.message.encode("utf-8"))
+    mensaje_hash = obtener_hash_mensaje(mensaje.message)
 
     insert_into_the_blockchain(mensaje.sender, mensaje.recipient, mensaje_hash)
 
@@ -424,7 +424,7 @@ def send_message_to_group(mensaje: mensaje_model):
             conn.commit()
 
 
-        mensaje_hash = SHA256.new(mensaje.message.encode("utf-8"))
+        mensaje_hash = obtener_hash_mensaje(mensaje.message)
 
         insert_into_the_blockchain(mensaje.sender, mensaje.recipient, mensaje_hash)
 
