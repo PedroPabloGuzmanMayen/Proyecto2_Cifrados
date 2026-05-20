@@ -5,7 +5,7 @@ from .pow import mine_block
 GENESIS_PREV_HASH = "0" * 64
 
 
-class Blockchain():
+class Blockchain:
 
     def __init__(self):
         self.prev_hash = ""
@@ -20,16 +20,15 @@ class Blockchain():
         a ningún mensaje real.
         """
         genesis = Block(
-            index=self.index_counter,
+            index=0,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            data={"sender_id": 1, "recipient_id": 1, "message_hash": "genesis"},
+            data={"sender_id": 0, "recipient_id": 0, "message_hash": "genesis"},
             previous_hash=GENESIS_PREV_HASH,
             nonce=0,
         )
         new_block = mine_block(genesis)
-        self.index_counter +=1
+        self.index_counter = 1
         self.prev_hash = new_block.hash
-        
         return new_block
 
     # ─── Nuevo bloque ────────────────────────────────────────────────────────
@@ -44,8 +43,6 @@ class Blockchain():
         Construye y mina el siguiente bloque de la cadena.
 
         Parámetros:
-            index         : índice del nuevo bloque (último índice + 1)
-            previous_hash : hash del bloque anterior
             sender_id     : ID del remitente del mensaje
             recipient_id  : ID del destinatario del mensaje
             message_hash  : SHA-256 del texto plano del mensaje
@@ -66,13 +63,11 @@ class Blockchain():
         )
         new_block = mine_block(block)
         self.prev_hash = new_block.hash
-        self.index_counter +=1
-
+        self.index_counter += 1
         return new_block
 
     # ─── Validación ──────────────────────────────────────────────────────────
 
-    @staticmethod
     def is_chain_valid(self, blocks: list[Block]) -> tuple[bool, str]:
         """
         Recorre la cadena completa verificando:
