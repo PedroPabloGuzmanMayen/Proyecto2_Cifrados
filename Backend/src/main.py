@@ -17,6 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from blockchain.chain import Blockchain
 from Crypto.Hash import SHA256
+import pyotp
+import qrcode
+import io
+import base64
 
 load_dotenv()
 
@@ -192,7 +196,7 @@ def login(credenciales: Usuario_Login):
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, email, contrasenas FROM users WHERE email = %s;",
+            "SELECT id, email, contrasenas, totp_secret FROM users WHERE email = %s;",
             (credenciales.email,),
         )
         result = cur.fetchone()
@@ -202,6 +206,13 @@ def login(credenciales: Usuario_Login):
 
     if not verify_password(credenciales.contrasena, result["contrasenas"]):
         raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+    
+    # MFA
+    if result["totp_secret"]:
+        return {
+            "mfa_required": True,
+            "user_id": result["id"]
+        }
 
     token = crear_token(result["id"], result["email"])
     return {"access_token": token, "token_type": "bearer"}
@@ -497,6 +508,16 @@ def agregar_miembro(group_id: int, body: AgregarMiembro):
 
     return {"ok": True, "group_id": group_id, "user_id": body.user_id}
 
+# Módulo 4: MFA
+class MFAEnableRequest(BaseModel):
+    pass
+
+class MFALoginRequest(BaseModel):
+    email: str
+    contrasena: str
+    totp_code: str
+
+
 # Módulo 3: Verificación de firma
 class VerifyRequest(BaseModel):
     password: str
@@ -611,3 +632,88 @@ def verify_blockchain():
         "valid": True,
         "detail": "Blockchain válida"
     }
+
+# ─── Módulo 4: MFA ───────────────────────────────────────────────────────────
+@app.post("/auth/mfa/enable")
+def enable_mfa(payload: dict = Depends(verificar_token)):
+    user_id = int(payload["sub"])
+    conn = get_conn()
+
+    secret = pyotp.random_base32()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET totp_secret = %s WHERE id = %s RETURNING email;",
+            (secret, user_id)
+        )
+        row = cur.fetchone()
+        conn.commit()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(
+        name=row["email"],
+        issuer_name="VaultChain"
+    )
+
+    qr = qrcode.make(uri)
+    buffer = io.BytesIO()
+    qr.save(buffer, format="PNG")
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    return {
+        "secret": secret,
+        "qr_code": qr_b64,
+        "uri": uri
+    }
+
+
+@app.post("/auth/mfa/verify")
+def verify_mfa_code(user_id: int, totp_code: str):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT totp_secret FROM users WHERE id = %s;",
+            (user_id,)
+        )
+        row = cur.fetchone()
+
+    if not row or not row["totp_secret"]:
+        raise HTTPException(status_code=400, detail="MFA no activado para este usuario")
+
+    totp = pyotp.TOTP(row["totp_secret"])
+    if not totp.verify(totp_code):
+        raise HTTPException(status_code=401, detail="Código TOTP inválido o expirado")
+
+    return {"ok": True, "detail": "Código TOTP válido"}
+
+
+@app.post("/auth/mfa/login")
+def login_with_mfa(body: MFALoginRequest):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, email, contrasenas, totp_secret FROM users WHERE email = %s;",
+            (body.email,),
+        )
+        result = cur.fetchone()
+
+    if not result:
+        raise HTTPException(status_code=400, detail="Usuario no existe")
+
+    if not verify_password(body.contrasena, result["contrasenas"]):
+        raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+
+    if not result["totp_secret"]:
+        raise HTTPException(status_code=400, detail="MFA no activado para este usuario")
+
+    totp = pyotp.TOTP(result["totp_secret"])
+    if not totp.verify(body.totp_code):
+        raise HTTPException(status_code=401, detail="Código TOTP inválido")
+
+    token = crear_token(result["id"], result["email"])
+    return {"access_token": token, "token_type": "bearer"}
