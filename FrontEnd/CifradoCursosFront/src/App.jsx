@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import AuthPage from './pages/AuthPage'
-import ChatPage from './pages/ChatPage'
-import DashboardPage from './pages/DashboardPage'
+import AuthPage from './pages/Authpage'
+import ChatPage from './pages/Chatpage'
+import DashboardPage from './pages/Dashboardpage'
 import { AuthContext } from './context/AuthConext'
 import './App.css'
 
