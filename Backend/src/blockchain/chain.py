@@ -5,7 +5,7 @@ from .pow import mine_block
 GENESIS_PREV_HASH = "0" * 64
 
 
-class Blockchain():
+class Blockchain:
 
     def __init__(self):
         self.prev_hash = ""
@@ -20,16 +20,15 @@ class Blockchain():
         a ningún mensaje real.
         """
         genesis = Block(
-            index=self.index_counter,
+            index=0,
             timestamp=datetime.now(timezone.utc).isoformat(),
             data={"sender_id": 1, "recipient_id": 1, "message_hash": "genesis"},
             previous_hash=GENESIS_PREV_HASH,
             nonce=0,
         )
         new_block = mine_block(genesis)
-        self.index_counter +=1
+        self.index_counter = 1
         self.prev_hash = new_block.hash
-        
         return new_block
 
     # ─── Nuevo bloque ────────────────────────────────────────────────────────
@@ -44,8 +43,6 @@ class Blockchain():
         Construye y mina el siguiente bloque de la cadena.
 
         Parámetros:
-            index         : índice del nuevo bloque (último índice + 1)
-            previous_hash : hash del bloque anterior
             sender_id     : ID del remitente del mensaje
             recipient_id  : ID del destinatario del mensaje
             message_hash  : SHA-256 del texto plano del mensaje
@@ -66,47 +63,47 @@ class Blockchain():
         )
         new_block = mine_block(block)
         self.prev_hash = new_block.hash
-        self.index_counter +=1
-
+        self.index_counter += 1
         return new_block
 
     # ─── Validación ──────────────────────────────────────────────────────────
+def is_chain_valid(
+    self,
+    blocks: list[Block],
+    start: int = 0,
+    end: int | None = None
+) -> tuple[bool, str]:
 
-    @staticmethod
-    def is_chain_valid(self, blocks: list[Block]) -> tuple[bool, str]:
-        """
-        Recorre la cadena completa verificando:
-          1. El hash almacenado coincide con el hash recalculado.
-          2. El previous_hash de cada bloque apunta al hash del bloque anterior.
-          3. El bloque génesis tiene previous_hash = "0" * 64.
+    if not blocks:
+        return False, "La cadena está vacía"
 
-        Retorna:
-            (True,  "Cadena válida")           si todo está correcto.
-            (False, "Descripción del error")   si se detecta inconsistencia.
-        """
-        if not blocks:
-            return False, "La cadena está vacía"
+    if end is None:
+        end = len(blocks)
 
-        # Verificar bloque génesis
+    # Verificar génesis solo si el rango incluye el bloque 0
+    if start == 0:
         genesis = blocks[0]
         if genesis.previous_hash != GENESIS_PREV_HASH:
-            return False, f"El bloque génesis tiene previous_hash inválido: {genesis.previous_hash}"
+            return False, (
+                f"El bloque génesis tiene previous_hash inválido: "
+                f"{genesis.previous_hash}"
+            )
 
-        for i, block in enumerate(blocks):
-            # 1 – Integridad: el hash almacenado debe coincidir con el recalculado
-            recalculated = block.compute_hash()
-            if block.hash != recalculated:
+    for i, block in enumerate(blocks[start:end], start=start):
+
+        recalculated = block.compute_hash()
+
+        if block.hash != recalculated:
+            return False, (
+                f"Bloque {block.index}: hash inválido"
+            )
+
+        if i > 0:
+            prev_block = blocks[i - 1]
+
+            if block.previous_hash != prev_block.hash:
                 return False, (
-                    f"Bloque {block.index}: hash almacenado no coincide con el recalculado. "
-                    f"Almacenado={block.hash[:16]}… Recalculado={recalculated[:16]}…"
+                    f"Bloque {block.index}: previous_hash inválido"
                 )
 
-            # 2 – Encadenamiento: a partir del bloque 1, previous_hash debe apuntar al anterior
-            if i > 0:
-                prev_block = blocks[i - 1]
-                if block.previous_hash != prev_block.hash:
-                    return False, (
-                        f"Bloque {block.index}: previous_hash no apunta al hash del bloque {prev_block.index}."
-                    )
-
-        return True, "Cadena válida"
+    return True, "Cadena válida"

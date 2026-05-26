@@ -140,11 +140,19 @@ async def lifespan(app: FastAPI):
 
         try: 
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO blockchain (sender_id, recipient_id, message_hash, previous_hash, nonce, hash)" \
-                "VALUES (%s, %s, %s, %s, %s, %s);", (genesis.data["sender_id"], genesis.data["recipient_id"], 
-                                                    genesis.data["message_hash"], genesis.previous_hash,
-                                                    genesis.nonce, genesis.hash
-                                                    ))
+                cur.execute(
+                    "INSERT INTO blockchain (block_index, sender_id, recipient_id, message_hash, previous_hash, nonce, hash)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s);",
+                    (
+                        genesis.index,
+                        genesis.data["sender_id"],
+                        genesis.data["recipient_id"],
+                        genesis.data["message_hash"],
+                        genesis.previous_hash,
+                        genesis.nonce,
+                        genesis.hash,
+                    ),
+                )
                 conn.commit()
 
         except Exception:
@@ -176,11 +184,19 @@ def insert_into_the_blockchain(sender_id: int, recipient_id: int, message_hash: 
     conn = get_conn()
     try: 
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO blockchain (sender_id, recipient_id, message_hash, previous_hash, nonce, hash)" \
-            "VALUES (%s, %s, %s, %s, %s, %s);", (sender_id, recipient_id, 
-                                                message_hash, new_block.previous_hash,
-                                                new_block.nonce, new_block.hash
-                                                ))
+            cur.execute(
+                "INSERT INTO blockchain (block_index, sender_id, recipient_id, message_hash, previous_hash, nonce, hash)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s);",
+                (
+                    new_block.index,
+                    sender_id,
+                    recipient_id,
+                    message_hash,
+                    new_block.previous_hash,
+                    new_block.nonce,
+                    new_block.hash,
+                ),
+            )
             conn.commit()
 
     except Exception:
