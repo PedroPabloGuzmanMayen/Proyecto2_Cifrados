@@ -30,6 +30,7 @@ blockchain = Blockchain()
 secret = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 # ─── JWT ────────────────────────────────────────────────────────────────────
@@ -37,8 +38,20 @@ def crear_token(user_id: int, email: str) -> str:
     payload = {
         "sub": str(user_id),
         "email": email,
+        "type": "access",
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES),
+    }
+    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
+
+
+def crear_refresh_token(user_id: int, email: str) -> str:
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "type": "refresh",
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     }
     return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
@@ -46,6 +59,8 @@ def crear_token(user_id: int, email: str) -> str:
 def verificar_token(token: str = Depends(oauth2_scheme)) -> dict:
     try:
         payload = jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Token inválido")
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
@@ -106,6 +121,10 @@ class DecryptRequest(BaseModel):
     y el blob cifrado que sí está en la BD.
     """
     password: str
+
+
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
 
 
 @asynccontextmanager
@@ -215,11 +234,30 @@ def login(credenciales: Usuario_Login):
         }
 
     token = crear_token(result["id"], result["email"])
-    return {"access_token": token, "token_type": "bearer"}
+    refresh = crear_refresh_token(result["id"], result["email"])
+    return {"access_token": token, "refresh_token": refresh, "token_type": "bearer"}
+
+
+@app.post("/refresh")
+def refresh_token(body: TokenRefreshRequest):
+    try:
+        payload = jwt.decode(body.refresh_token, secret, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token inválido")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expirado")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Refresh token inválido")
+
+    user_id = int(payload["sub"])
+    email = payload["email"]
+    new_token = crear_token(user_id, email)
+    new_refresh = crear_refresh_token(user_id, email)
+    return {"access_token": new_token, "refresh_token": new_refresh, "token_type": "bearer"}
 
 
 @app.get("/users/{user_id}/key")
-def obtener_llave_publica(user_id: int):
+def obtener_llave_publica(user_id: int, payload: dict = Depends(verificar_token)):
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute("SELECT public_key FROM users WHERE id = %s;", (user_id,))
@@ -230,7 +268,7 @@ def obtener_llave_publica(user_id: int):
 
 
 @app.post("/individual_message/")
-def send_message(mensaje: mensaje_model):
+def send_message(mensaje: mensaje_model, payload: dict = Depends(verificar_token)):
     aes_key = generar_llave_aes()
     conn = get_conn()
     with conn.cursor() as cur:
@@ -282,7 +320,7 @@ def send_message(mensaje: mensaje_model):
 
 # ─── NUEVO: GET mensajes cifrados ────────────────────────────────────────────
 @app.get("/messages/{user_id}")
-def get_messages(user_id: int):
+def get_messages(user_id: int, payload: dict = Depends(verificar_token)):
     """
     Devuelve todos los mensajes cifrados recibidos por user_id.
     El cliente recibe los blobs y puede descifrarlos con el endpoint POST debajo.
@@ -312,7 +350,7 @@ def get_messages(user_id: int):
 
 # ─── NUEVO: POST descifrar un mensaje ────────────────────────────────────────
 @app.post("/messages/{user_id}/decrypt/{message_id}")
-def decrypt_message(user_id: int, message_id: int, body: DecryptRequest):
+def decrypt_message(user_id: int, message_id: int, body: DecryptRequest, payload: dict = Depends(verificar_token)):
     """
     Descifra un mensaje específico en el servidor usando la contraseña del usuario.
 
@@ -373,9 +411,106 @@ def decrypt_message(user_id: int, message_id: int, body: DecryptRequest):
     return {"message_id": message_id, "plaintext": plaintext}
 
 
-@app.post("/group_message")
+@app.get("/users/{user_id}/groups")
+def get_user_groups(user_id: int, payload: dict = Depends(verificar_token)):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE id = %s;", (user_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-def send_message_to_group(mensaje: mensaje_model):
+        cur.execute(
+            """
+            SELECT g.id, g.name
+            FROM groups g
+            JOIN group_members gm ON gm.id_group = g.id
+            WHERE gm.id_user = %s
+            ORDER BY g.name;
+            """,
+            (user_id,),
+        )
+        rows = cur.fetchall()
+
+    return {"user_id": user_id, "groups": rows}
+
+
+@app.get("/users/{user_id}/groups/messages")
+def get_group_messages(user_id: int, payload: dict = Depends(verificar_token)):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE id = %s;", (user_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        cur.execute(
+            """
+            SELECT m.id, m.sender_id, u.name AS sender_name,
+                   m.group_id, g.name AS group_name,
+                   m.ciphertext, m.encrypted_key, m.nonce, m.auth_tag,
+                   m.created_at
+            FROM messages m
+            JOIN users u ON u.id = m.sender_id
+            JOIN groups g ON g.id = m.group_id
+            WHERE m.recipient_id = %s AND m.group_id IS NOT NULL
+            ORDER BY m.created_at DESC;
+            """,
+            (user_id,),
+        )
+        rows = cur.fetchall()
+
+    return {"user_id": user_id, "messages": rows}
+
+
+@app.post("/messages/{user_id}/decrypt_group/{message_id}")
+def decrypt_group_message(user_id: int, message_id: int, body: DecryptRequest, payload: dict = Depends(verificar_token)):
+    conn = get_conn()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT encrypted_private_key FROM users WHERE id = %s;",
+            (user_id,),
+        )
+        user_row = cur.fetchone()
+    if not user_row:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT ciphertext, encrypted_key, nonce, auth_tag
+            FROM messages
+            WHERE id = %s AND recipient_id = %s AND group_id IS NOT NULL;
+            """,
+            (message_id, user_id),
+        )
+        msg_row = cur.fetchone()
+    if not msg_row:
+        raise HTTPException(status_code=404, detail="Mensaje de grupo no encontrado")
+
+    try:
+        private_key = cargar_llave_privada(
+            body.password, user_row["encrypted_private_key"]
+        )
+        plaintext = descifrar_mensaje(
+            {
+                "ciphertext":    msg_row["ciphertext"],
+                "encrypted_key": msg_row["encrypted_key"],
+                "nonce":         msg_row["nonce"],
+                "auth_tag":      msg_row["auth_tag"],
+            },
+            private_key,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo descifrar: contraseña incorrecta o mensaje alterado",
+        )
+
+    return {"message_id": message_id, "plaintext": plaintext}
+
+
+@app.post("/group_message")
+def send_message_to_group(mensaje: mensaje_model, payload: dict = Depends(verificar_token)):
     aes_key = generar_llave_aes()
     conn = get_conn()
     with conn.cursor() as cur:
@@ -442,7 +577,7 @@ def send_message_to_group(mensaje: mensaje_model):
     return {"ok": True, "message": "mensaje enviado con éxito"}
 
 @app.post("/groups")
-def crear_grupo(grupo: GrupoCreate):
+def crear_grupo(grupo: GrupoCreate, payload: dict = Depends(verificar_token)):
     conn = get_conn()
 
     with conn.cursor() as cur:
@@ -478,7 +613,7 @@ def crear_grupo(grupo: GrupoCreate):
 
 
 @app.post("/groups/{group_id}/members")
-def agregar_miembro(group_id: int, body: AgregarMiembro):
+def agregar_miembro(group_id: int, body: AgregarMiembro, payload: dict = Depends(verificar_token)):
     conn = get_conn()
 
     with conn.cursor() as cur:
@@ -523,7 +658,7 @@ class VerifyRequest(BaseModel):
     password: str
 
 @app.post("/messages/{msg_id}/verify")
-def verify_message_signature(msg_id: int, body: VerifyRequest):
+def verify_message_signature(msg_id: int, body: VerifyRequest, payload: dict = Depends(verificar_token)):
     conn = get_conn()
 
     with conn.cursor() as cur:
@@ -584,7 +719,7 @@ def verify_message_signature(msg_id: int, body: VerifyRequest):
 
 
 @app.get("/blockchain/verify")
-def verify_blockchain():
+def verify_blockchain(payload: dict = Depends(verificar_token)):
 
     conn = get_conn()
 
@@ -671,7 +806,7 @@ def enable_mfa(payload: dict = Depends(verificar_token)):
 
 
 @app.post("/auth/mfa/verify")
-def verify_mfa_code(user_id: int, totp_code: str):
+def verify_mfa_code(user_id: int, totp_code: str, payload: dict = Depends(verificar_token)):
     conn = get_conn()
 
     with conn.cursor() as cur:
@@ -716,4 +851,5 @@ def login_with_mfa(body: MFALoginRequest):
         raise HTTPException(status_code=401, detail="Código TOTP inválido")
 
     token = crear_token(result["id"], result["email"])
-    return {"access_token": token, "token_type": "bearer"}
+    refresh = crear_refresh_token(result["id"], result["email"])
+    return {"access_token": token, "refresh_token": refresh, "token_type": "bearer"}
