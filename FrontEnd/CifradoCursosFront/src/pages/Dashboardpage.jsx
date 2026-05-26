@@ -139,7 +139,7 @@ export default function DashboardPage() {
         <Panel title="Llave pública  GET /users/:id/key" icon="🗝">
           <Field label="User ID" type="number" value={keyUserId} onChange={setKeyUserId} placeholder="1" />
           <button className="dash-btn" disabled={loading.getKey}
-            onClick={() => run('getKey', () => api.getUserKey(keyUserId))}>
+            onClick={() => run('getKey', () => api.getUserKey(keyUserId, token))}>
             {loading.getKey ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.getKey} error={errors.getKey} />
@@ -149,7 +149,7 @@ export default function DashboardPage() {
         <Panel title="Ver mensajes  GET /messages/:userId" icon="📨">
           <Field label="User ID" type="number" value={getMsgUserId} onChange={setGetMsgUserId} />
           <button className="dash-btn" disabled={loading.getMsg}
-            onClick={() => run('getMsg', () => api.getMessages(getMsgUserId))}>
+            onClick={() => run('getMsg', () => api.getMessages(getMsgUserId, token))}>
             {loading.getMsg ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.getMsg} error={errors.getMsg} />
@@ -163,7 +163,7 @@ export default function DashboardPage() {
           <button className="dash-btn" disabled={loading.sendMsg}
             onClick={() => run('sendMsg', () => api.sendMessage({
               sender: parseInt(sendSender), recipient: parseInt(sendRecipient), message: sendMsg, sender_password: sendPwd
-            }))}>
+            }, token))}>
             {loading.sendMsg ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.sendMsg} error={errors.sendMsg} />
@@ -174,7 +174,7 @@ export default function DashboardPage() {
           <Field label="Message ID" type="number" value={decMsgId} onChange={setDecMsgId} />
           <Field label="Contraseña" type="password" value={decPwd} onChange={setDecPwd} />
           <button className="dash-btn" disabled={loading.decrypt}
-            onClick={() => run('decrypt', () => api.decryptMessage(decUserId, decMsgId, decPwd))}>
+            onClick={() => run('decrypt', () => api.decryptMessage(decUserId, decMsgId, decPwd, token))}>
             {loading.decrypt ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.decrypt} error={errors.decrypt} />
@@ -184,7 +184,7 @@ export default function DashboardPage() {
           <Field label="Message ID" type="number" value={verMsgId} onChange={setVerMsgId} />
           <Field label="Contraseña (receptor)" type="password" value={verPwd} onChange={setVerPwd} />
           <button className="dash-btn" disabled={loading.verify}
-            onClick={() => run('verify', () => api.verifySignature(verMsgId, verPwd))}>
+            onClick={() => run('verify', () => api.verifySignature(verMsgId, verPwd, token))}>
             {loading.verify ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.verify} error={errors.verify} />
@@ -199,7 +199,7 @@ export default function DashboardPage() {
           <button className="dash-btn" disabled={loading.grpMsg}
             onClick={() => run('grpMsg', () => api.sendGroupMessage({
               sender: parseInt(grpSender), recipient: parseInt(grpId), message: grpMsg, sender_password: grpPwd
-            }))}>
+            }, token))}>
             {loading.grpMsg ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.grpMsg} error={errors.grpMsg} />
@@ -211,7 +211,7 @@ export default function DashboardPage() {
           <button className="dash-btn" disabled={loading.createGrp}
             onClick={() => run('createGrp', () => api.createGroup({
               name: newGrpName, miembros: newGrpMembers.split(',').map(s => parseInt(s.trim())).filter(Boolean)
-            }))}>
+            }, token))}>
             {loading.createGrp ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.createGrp} error={errors.createGrp} />
@@ -221,7 +221,7 @@ export default function DashboardPage() {
           <Field label="Group ID" type="number" value={addGrpId} onChange={setAddGrpId} />
           <Field label="User ID a agregar" type="number" value={addUserId} onChange={setAddUserId} />
           <button className="dash-btn" disabled={loading.addMember}
-            onClick={() => run('addMember', () => api.addMember(addGrpId, parseInt(addUserId)))}>
+            onClick={() => run('addMember', () => api.addMember(addGrpId, parseInt(addUserId), token))}>
             {loading.addMember ? <span className="spinner sm" /> : '▶ Ejecutar'}
           </button>
           <ResultBox result={results.addMember} error={errors.addMember} />
@@ -231,7 +231,7 @@ export default function DashboardPage() {
         <Panel title="Verificar blockchain  GET /blockchain/verify" icon="⛓">
           <p className="panel-desc">Verifica la integridad completa de la cadena de bloques</p>
           <button className="dash-btn" disabled={loading.blockchain}
-            onClick={() => run('blockchain', () => api.verifyBlockchain())}>
+            onClick={() => run('blockchain', () => api.verifyBlockchain(token))}>
             {loading.blockchain ? <span className="spinner sm" /> : '▶ Ejecutar verificación'}
           </button>
           <ResultBox result={results.blockchain} error={errors.blockchain} />
@@ -258,7 +258,7 @@ export default function DashboardPage() {
           <Field label="User ID" type="number" value={mfaUserId} onChange={setMfaUserId} />
           <Field label="Código TOTP (6 dígitos)" value={mfaTotp} onChange={setMfaTotp} placeholder="123456" />
           <button className="dash-btn" disabled={loading.verifyMFA}
-            onClick={() => run('verifyMFA', () => api.verifyMFA(mfaUserId, mfaTotp))}>
+            onClick={() => run('verifyMFA', () => api.verifyMFA(mfaUserId, mfaTotp, token))}>
             {loading.verifyMFA ? <span className="spinner sm" /> : '▶ Verificar código'}
           </button>
           <ResultBox result={results.verifyMFA} error={errors.verifyMFA} />

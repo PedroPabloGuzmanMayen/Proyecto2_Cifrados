@@ -27,44 +27,44 @@ export const api = {
   enableMFA: (token) =>
     fetch(`${BASE}/auth/mfa/enable`, { method: 'POST', headers: headers(token) }).then(handle),
 
-  verifyMFA: (user_id, totp_code) =>
-    fetch(`${BASE}/auth/mfa/verify?user_id=${user_id}&totp_code=${totp_code}`, { method: 'POST', headers: headers() }).then(handle),
+  verifyMFA: (user_id, totp_code, token) =>
+    fetch(`${BASE}/auth/mfa/verify?user_id=${user_id}&totp_code=${totp_code}`, { method: 'POST', headers: headers(token) }).then(handle),
 
   // Users
-  getUserKey: (userId) =>
-    fetch(`${BASE}/users/${userId}/key`, { headers: headers() }).then(handle),
+  getUserKey: (userId, token) =>
+    fetch(`${BASE}/users/${userId}/key`, { headers: headers(token) }).then(handle),
 
   // Messages
-  getMessages: (userId) =>
-    fetch(`${BASE}/messages/${userId}`, { headers: headers() }).then(handle),
+  getMessages: (userId, token) =>
+    fetch(`${BASE}/messages/${userId}`, { headers: headers(token) }).then(handle),
 
-  sendMessage: (body) =>
-    fetch(`${BASE}/individual_message/`, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(handle),
+  sendMessage: (body, token) =>
+    fetch(`${BASE}/individual_message/`, { method: 'POST', headers: headers(token), body: JSON.stringify(body) }).then(handle),
 
-  decryptMessage: (userId, msgId, password) =>
+  decryptMessage: (userId, msgId, password, token) =>
     fetch(`${BASE}/messages/${userId}/decrypt/${msgId}`, {
-      method: 'POST', headers: headers(), body: JSON.stringify({ password }),
+      method: 'POST', headers: headers(token), body: JSON.stringify({ password }),
     }).then(handle),
 
-  verifySignature: (msgId, password) =>
+  verifySignature: (msgId, password, token) =>
     fetch(`${BASE}/messages/${msgId}/verify`, {
-      method: 'POST', headers: headers(), body: JSON.stringify({ password }),
+      method: 'POST', headers: headers(token), body: JSON.stringify({ password }),
     }).then(handle),
 
   // Group messages
-  sendGroupMessage: (body) =>
-    fetch(`${BASE}/group_message`, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(handle),
+  sendGroupMessage: (body, token) =>
+    fetch(`${BASE}/group_message`, { method: 'POST', headers: headers(token), body: JSON.stringify(body) }).then(handle),
 
   // Groups
-  createGroup: (body) =>
-    fetch(`${BASE}/groups`, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(handle),
+  createGroup: (body, token) =>
+    fetch(`${BASE}/groups`, { method: 'POST', headers: headers(token), body: JSON.stringify(body) }).then(handle),
 
-  addMember: (groupId, userId) =>
+  addMember: (groupId, userId, token) =>
     fetch(`${BASE}/groups/${groupId}/members`, {
-      method: 'POST', headers: headers(), body: JSON.stringify({ user_id: userId }),
+      method: 'POST', headers: headers(token), body: JSON.stringify({ user_id: userId }),
     }).then(handle),
 
   // Blockchain
-  verifyBlockchain: () =>
-    fetch(`${BASE}/blockchain/verify`, { headers: headers() }).then(handle),
+  verifyBlockchain: (token) =>
+    fetch(`${BASE}/blockchain/verify`, { headers: headers(token) }).then(handle),
 }

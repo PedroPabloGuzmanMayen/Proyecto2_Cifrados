@@ -518,9 +518,13 @@ input:focus {
 .mode-toggle button.active { background: rgba(0,255,200,0.1); border-color: var(--accent); color: var(--accent); }
 .mode-toggle button:hover:not(.active) { border-color: var(--border); color: var(--text); }
 
-.input-row { display: flex; gap: 8px; }
-.recipient-input { width: 140px; flex-shrink: 0; }
-.password-input { flex: 1; }
+.input-row { display: flex; gap: 8px; align-items: flex-end; }
+.chat-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.chat-field span { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+.recipient-field { width: 140px; flex-shrink: 0; }
+.password-field { flex: 1; }
+.recipient-input,
+.password-input { width: 100%; }
 
 .message-row { display: flex; gap: 8px; }
 .message-input { flex: 1; }

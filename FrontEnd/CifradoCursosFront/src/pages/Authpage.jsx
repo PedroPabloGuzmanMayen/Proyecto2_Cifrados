@@ -13,14 +13,21 @@ function decodeToken(token) {
 
 export default function AuthPage() {
   const { login } = useAuth()
-  const [mode, setMode] = useState('login') // login | register | mfa
+  const [mode, setMode] = useState('login') // login | register | mfa | setupMfa
   const [form, setForm] = useState({ name: '', email: '', contrasenas: '', contrasena: '' })
   const [mfaData, setMfaData] = useState({ userId: null, code: '' })
+  const [mfaSetup, setMfaSetup] = useState({ token: '', userId: null, qrCode: '', secret: '', code: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const setAuthMode = (nextMode) => {
+    setMode(nextMode)
+    setError('')
+    setSuccess('')
+  }
 
   const handleLogin = async () => {
     setLoading(true); setError('')
@@ -57,6 +64,58 @@ export default function AuthPage() {
     setLoading(false)
   }
 
+  const handleSetupMFA = async () => {
+    setLoading(true); setError(''); setSuccess('')
+    try {
+      const auth = await api.login({ email: form.email, contrasena: form.contrasenas })
+      if (auth.mfa_required) {
+        setMfaData(m => ({ ...m, userId: auth.user_id }))
+        setMode('mfa')
+        setError('Esta cuenta ya tiene MFA activo. Ingresa tu código para entrar.')
+        setLoading(false)
+        return
+      }
+
+      const userData = decodeToken(auth.access_token)
+      if (!userData?.id) throw new Error('No se pudo leer el token de sesión')
+
+      const setup = await api.enableMFA(auth.access_token)
+      setMfaSetup({
+        token: auth.access_token,
+        userId: userData.id,
+        qrCode: setup.qr_code,
+        secret: setup.secret,
+        code: '',
+      })
+      setSuccess('QR generado. Escanéalo y escribe el código de 6 dígitos.')
+    } catch (e) { setError(e.message) }
+    setLoading(false)
+  }
+
+  const handleVerifySetupMFA = async () => {
+    setLoading(true); setError('')
+    try {
+      await api.verifyMFA(mfaSetup.userId, mfaSetup.code, mfaSetup.token)
+      const userData = decodeToken(mfaSetup.token)
+      login(mfaSetup.token, userData)
+    } catch (e) { setError(e.message) }
+    setLoading(false)
+  }
+
+  const handleSubmit = () => {
+    if (mode === 'login') return handleLogin()
+    if (mode === 'register') return handleRegister()
+    if (mode === 'setupMfa') return mfaSetup.qrCode ? handleVerifySetupMFA() : handleSetupMFA()
+    return handleMFA()
+  }
+
+  const submitText = () => {
+    if (mode === 'login') return 'Entrar'
+    if (mode === 'register') return 'Crear cuenta'
+    if (mode === 'setupMfa') return mfaSetup.qrCode ? 'Verificar y entrar' : 'Generar QR'
+    return 'Entrar con MFA'
+  }
+
   return (
     <div className="auth-root">
       <div className="auth-brand">
@@ -72,22 +131,34 @@ export default function AuthPage() {
       </div>
 
       <div className="auth-card">
-        {mode !== 'mfa' && (
-          <div className="auth-tabs">
-            <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => { setMode('login'); setError(''); setSuccess('') }}>
-              Iniciar sesión
-            </button>
-            <button className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => { setMode('register'); setError(''); setSuccess('') }}>
-              Registrarse
-            </button>
-          </div>
-        )}
+        <div className="auth-tabs">
+          <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setAuthMode('login')}>
+            Iniciar sesión
+          </button>
+          <button className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setAuthMode('register')}>
+            Registrarse
+          </button>
+          <button className={`auth-tab ${mode === 'mfa' ? 'active' : ''}`} onClick={() => setAuthMode('mfa')}>
+            MFA
+          </button>
+          <button className={`auth-tab ${mode === 'setupMfa' ? 'active' : ''}`} onClick={() => setAuthMode('setupMfa')}>
+            Activar
+          </button>
+        </div>
 
         {mode === 'mfa' && (
           <div className="auth-form-title">
             <span className="mfa-icon">🔐</span>
             <h2>Verificación MFA</h2>
             <p>Ingresa el código de tu app autenticadora</p>
+          </div>
+        )}
+
+        {mode === 'setupMfa' && (
+          <div className="auth-form-title">
+            <span className="mfa-icon">🔐</span>
+            <h2>Activar MFA</h2>
+            <p>Genera el QR y verifica tu app autenticadora</p>
           </div>
         )}
 
@@ -102,36 +173,41 @@ export default function AuthPage() {
             </div>
           )}
 
-          {mode !== 'mfa' && (
-            <>
-              <div className="field">
-                <label>Correo electrónico</label>
-                <input type="email" placeholder="tu@correo.com" value={form.email} onChange={e => set('email', e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Contraseña</label>
-                <input type="password" placeholder="••••••••" value={form.contrasenas} onChange={e => set('contrasenas', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleRegister())} />
-              </div>
-            </>
+          <div className="field">
+            <label>Correo electrónico</label>
+            <input type="email" placeholder="tu@correo.com" value={form.email} onChange={e => set('email', e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Contraseña</label>
+            <input type="password" placeholder="••••••••" value={form.contrasenas} onChange={e => set('contrasenas', e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+          </div>
+
+          {mode === 'setupMfa' && mfaSetup.qrCode && (
+            <div className="qr-container">
+              <img src={`data:image/png;base64,${mfaSetup.qrCode}`} alt="QR MFA" className="qr-img" />
+              <div className="secret-box">Secret: <code>{mfaSetup.secret}</code></div>
+            </div>
           )}
 
-          {mode === 'mfa' && (
+          {(mode === 'mfa' || (mode === 'setupMfa' && mfaSetup.qrCode)) && (
             <div className="field">
               <label>Código TOTP (6 dígitos)</label>
-              <input type="text" placeholder="123456" maxLength={6} value={mfaData.code}
-                onChange={e => setMfaData(m => ({ ...m, code: e.target.value }))}
-                onKeyDown={e => e.key === 'Enter' && handleMFA()} className="code-input" />
+              <input type="text" placeholder="123456" maxLength={6} value={mode === 'setupMfa' ? mfaSetup.code : mfaData.code}
+                onChange={e => mode === 'setupMfa'
+                  ? setMfaSetup(m => ({ ...m, code: e.target.value }))
+                  : setMfaData(m => ({ ...m, code: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()} className="code-input" />
             </div>
           )}
 
           <button className="auth-btn" disabled={loading}
-            onClick={mode === 'login' ? handleLogin : mode === 'register' ? handleRegister : handleMFA}>
-            {loading ? <span className="spinner" /> : mode === 'login' ? 'Entrar' : mode === 'register' ? 'Crear cuenta' : 'Verificar'}
+            onClick={handleSubmit}>
+            {loading ? <span className="spinner" /> : submitText()}
           </button>
 
-          {mode === 'mfa' && (
-            <button className="auth-link" onClick={() => { setMode('login'); setError('') }}>← Volver al login</button>
+          {(mode === 'mfa' || mode === 'setupMfa') && (
+            <button className="auth-link" onClick={() => setAuthMode('login')}>Usar login normal</button>
           )}
         </div>
       </div>

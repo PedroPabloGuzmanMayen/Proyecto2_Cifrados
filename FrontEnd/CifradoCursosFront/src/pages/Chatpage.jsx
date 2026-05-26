@@ -11,7 +11,6 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify }) {
   const [showActions, setShowActions] = useState(false)
   const [pwd, setPwd] = useState('')
   const [asking, setAsking] = useState(false)
-  const [sigInfo, setSigInfo] = useState(null)
 
   const doDecrypt = async () => {
     if (!pwd) return
@@ -22,7 +21,7 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify }) {
   const doVerify = async () => {
     if (!pwd) return
     const result = await onVerify(msg.id, pwd)
-    if (result) { setVerified(result.verified); setSigInfo(result.detail); setAsking(false); setPwd('') }
+    if (result) { setVerified(result.verified); setAsking(false); setPwd('') }
   }
 
   return (
@@ -72,7 +71,7 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify }) {
 }
 
 export default function ChatPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const [messages, setMessages] = useState([])
   const [recipientId, setRecipientId] = useState('')
   const [text, setText] = useState('')
@@ -88,25 +87,41 @@ export default function ChatPage() {
   const loadMessages = async () => {
     if (!user?.id) return
     try {
-      const res = await api.getMessages(user.id)
+      const res = await api.getMessages(user.id, token)
       setMessages(res.messages || [])
     } catch (e) { setError(e.message) }
   }
 
-  useEffect(() => { loadMessages() }, [user])
+  useEffect(() => {
+    const userId = user?.id
+    if (!userId) return
+
+    let cancelled = false
+    const fetchMessages = async () => {
+      try {
+        const res = await api.getMessages(userId, token)
+        if (!cancelled) setMessages(res.messages || [])
+      } catch (e) {
+        if (!cancelled) setError(e.message)
+      }
+    }
+
+    fetchMessages()
+    return () => { cancelled = true }
+  }, [user?.id, token])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const sendMessage = async () => {
-    if (!text.trim() || !password) { setSendError('Escribe un mensaje y tu contraseña'); return }
+    if (!text.trim() || !password) { setSendError('Escribe un mensaje y tu password'); return }
     setSendError(''); setSendOk('')
     setLoading(true)
     try {
       if (chatMode === 'individual') {
         if (!recipientId) { setSendError('Ingresa el ID del destinatario'); setLoading(false); return }
-        await api.sendMessage({ sender: user.id, recipient: parseInt(recipientId), message: text, sender_password: password })
+        await api.sendMessage({ sender: user.id, recipient: parseInt(recipientId), message: text, sender_password: password }, token)
       } else {
         if (!groupId) { setSendError('Ingresa el ID del grupo'); setLoading(false); return }
-        await api.sendGroupMessage({ sender: user.id, recipient: parseInt(groupId), message: text, sender_password: password })
+        await api.sendGroupMessage({ sender: user.id, recipient: parseInt(groupId), message: text, sender_password: password }, token)
       }
       setSendOk('✓ Mensaje enviado y registrado en blockchain')
       setText('')
@@ -118,14 +133,14 @@ export default function ChatPage() {
 
   const handleDecrypt = async (msgId, pwd) => {
     try {
-      const res = await api.decryptMessage(user.id, msgId, pwd)
+      const res = await api.decryptMessage(user.id, msgId, pwd, token)
       return res.plaintext
     } catch (e) { setSendError(e.message); return null }
   }
 
   const handleVerify = async (msgId, pwd) => {
     try {
-      return await api.verifySignature(msgId, pwd)
+      return await api.verifySignature(msgId, pwd, token)
     } catch (e) { setSendError(e.message); return null }
   }
 
@@ -171,20 +186,26 @@ export default function ChatPage() {
         </div>
 
         <div className="input-row">
-          <input
-            className="recipient-input"
-            type="number"
-            placeholder={chatMode === 'individual' ? 'ID destinatario' : 'ID grupo'}
-            value={chatMode === 'individual' ? recipientId : groupId}
-            onChange={e => chatMode === 'individual' ? setRecipientId(e.target.value) : setGroupId(e.target.value)}
-          />
-          <input
-            className="password-input"
-            type="password"
-            placeholder="Tu contraseña"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-          />
+          <label className="chat-field recipient-field">
+            <span>{chatMode === 'individual' ? 'Destinatario' : 'Grupo'}</span>
+            <input
+              className="recipient-input"
+              type="number"
+              placeholder={chatMode === 'individual' ? 'ID destinatario' : 'ID grupo'}
+              value={chatMode === 'individual' ? recipientId : groupId}
+              onChange={e => chatMode === 'individual' ? setRecipientId(e.target.value) : setGroupId(e.target.value)}
+            />
+          </label>
+          <label className="chat-field password-field">
+            <span>Password</span>
+            <input
+              className="password-input"
+              type="password"
+              placeholder="Password de tu cuenta"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </label>
         </div>
         <div className="message-row">
           <input

@@ -22,7 +22,7 @@ class Blockchain:
         genesis = Block(
             index=0,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            data={"sender_id": 0, "recipient_id": 0, "message_hash": "genesis"},
+            data={"sender_id": 1, "recipient_id": 1, "message_hash": "genesis"},
             previous_hash=GENESIS_PREV_HASH,
             nonce=0,
         )
