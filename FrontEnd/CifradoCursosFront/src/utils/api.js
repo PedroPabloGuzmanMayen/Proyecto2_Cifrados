@@ -1,6 +1,6 @@
 //Aqui se va a utilizar para llamar a las funciones fetch para conecta a la API 
 
-const BASE = 'http://localhost:8000'
+const BASE = 'https://proyecto2-cifrados-4.onrender.com'
 
 const headers = (token) => ({
   'Content-Type': 'application/json',
