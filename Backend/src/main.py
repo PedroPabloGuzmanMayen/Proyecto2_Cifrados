@@ -82,6 +82,7 @@ def get_conn():
             dbname=os.getenv("POSTGRES_DB"),
             user=os.getenv("POSTGRES_USER"),
             password=os.getenv("POSTGRES_PASSWORD"),
+            sslmode="require",
             row_factory=dict_row,
         )
     return _conn
