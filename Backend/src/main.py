@@ -391,15 +391,15 @@ def decrypt_message(user_id: int, message_id: int, body: DecryptRequest, payload
     if not user_row:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    # 2 – Recuperar el mensaje cifrado
+    # 2 – Recuperar el mensaje cifrado (sender or recipient can decrypt)
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT ciphertext, encrypted_key, nonce, auth_tag
             FROM messages
-            WHERE id = %s AND recipient_id = %s;
+            WHERE id = %s AND (recipient_id = %s OR sender_id = %s);
             """,
-            (message_id, user_id),
+            (message_id, user_id, user_id),
         )
         msg_row = cur.fetchone()
     if not msg_row:
@@ -666,7 +666,7 @@ def list_users(payload: dict = Depends(verificar_token)):
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, email FROM users WHERE id != %s ORDER BY name ASC;",
+            "SELECT id, name, email FROM users WHERE id != %s AND id != 1 ORDER BY name ASC;",
             (current_user_id,),
         )
         rows = cur.fetchall()
