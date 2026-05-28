@@ -679,7 +679,7 @@ def get_group_messages_for_group(group_id: int, payload: dict = Depends(verifica
             WHERE m.group_id = %s AND (m.recipient_id = %s)
             ORDER BY m.created_at ASC;
             """,
-            (group_id, user_id, user_id),
+            (group_id, user_id),
         )
         rows = cur.fetchall()
     return {"group_id": group_id, "messages": rows}
