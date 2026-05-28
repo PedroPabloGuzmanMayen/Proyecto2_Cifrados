@@ -391,6 +391,26 @@ input:focus {
 .conv-empty p { font-size: 14px; color: var(--text2); margin-bottom: 4px; }
 .conv-empty span { font-size: 12px; }
 
+.conv-section:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.conv-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 12px 16px 6px;
+}
+
+.group-avatar {
+  background: var(--accent3) !important;
+  font-size: 12px !important;
+}
+
 .conv-item {
   display: flex;
   align-items: center;
@@ -611,28 +631,6 @@ input:focus {
 
 .send-error { color: var(--accent3); font-size: 12px; font-family: var(--font-mono); }
 .send-ok { color: var(--accent); font-size: 12px; font-family: var(--font-mono); }
-
-.mode-toggle {
-  display: flex;
-  gap: 4px;
-  align-self: flex-start;
-}
-
-.mode-toggle button {
-  background: none;
-  border: 1px solid var(--border2);
-  border-radius: var(--r);
-  color: var(--text2);
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.mode-toggle button.active { background: rgba(0,255,200,0.1); border-color: var(--accent); color: var(--accent); }
-.mode-toggle button:hover:not(.active) { border-color: var(--border); color: var(--text); }
 
 .input-row { display: flex; gap: 8px; align-items: flex-end; }
 .chat-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

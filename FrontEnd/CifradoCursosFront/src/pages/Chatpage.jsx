@@ -95,43 +95,62 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify, onDelete }) {
   )
 }
 
-function UserList({ users, conversationsMap, selectedId, onSelect, loading }) {
+function Sidebar({ users, groups, conversationsMap, selectedChat, onSelect, loading }) {
   return (
     <div className="conv-list">
-      <div className="conv-list-header">
-        <h3>Usuarios</h3>
-      </div>
-      <div className="conv-items">
-        {loading ? (
-          <div className="conv-loading">
-            <span className="spinner sm" />
+      {loading ? (
+        <div className="conv-loading">
+          <span className="spinner sm" />
+        </div>
+      ) : (
+        <>
+          <div className="conv-section">
+            <div className="conv-section-title">Usuarios</div>
+            {users.length === 0 ? (
+              <div className="conv-empty"><p>No hay usuarios</p></div>
+            ) : (
+              users.map(u => {
+                const conv = conversationsMap[u.id]
+                return (
+                  <button
+                    key={u.id}
+                    className={`conv-item ${selectedChat?.type === 'user' && selectedChat.id === u.id ? 'active' : ''}`}
+                    onClick={() => onSelect({ type: 'user', id: u.id, name: u.name, email: u.email })}
+                  >
+                    <div className="conv-avatar">{u.name?.[0]?.toUpperCase() || '?'}</div>
+                    <div className="conv-info">
+                      <span className="conv-name">{u.name}</span>
+                      <span className="conv-email">{u.email}</span>
+                      {conv && (
+                        <span className="conv-preview">{conv.last_ciphertext?.slice(0, 30)}...</span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })
+            )}
           </div>
-        ) : users.length === 0 ? (
-          <div className="conv-empty">
-            <p>No hay usuarios</p>
-          </div>
-        ) : (
-          users.map(u => {
-            const conv = conversationsMap[u.id]
-            return (
-              <button
-                key={u.id}
-                className={`conv-item ${selectedId === u.id ? 'active' : ''}`}
-                onClick={() => onSelect(u)}
-              >
-                <div className="conv-avatar">{u.name?.[0]?.toUpperCase() || '?'}</div>
-                <div className="conv-info">
-                  <span className="conv-name">{u.name}</span>
-                  <span className="conv-email">{u.email}</span>
-                  {conv && (
-                    <span className="conv-preview">{conv.last_ciphertext?.slice(0, 30)}...</span>
-                  )}
-                </div>
-              </button>
-            )
-          })
-        )}
-      </div>
+
+          {groups.length > 0 && (
+            <div className="conv-section">
+              <div className="conv-section-title">Grupos</div>
+              {groups.map(g => (
+                <button
+                  key={g.id}
+                  className={`conv-item ${selectedChat?.type === 'group' && selectedChat.id === g.id ? 'active' : ''}`}
+                  onClick={() => onSelect({ type: 'group', id: g.id, name: g.name })}
+                >
+                  <div className="conv-avatar group-avatar">G</div>
+                  <div className="conv-info">
+                    <span className="conv-name">{g.name}</span>
+                    <span className="conv-email">Grupo #{g.id}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -140,17 +159,16 @@ export default function ChatPage() {
   const { user, token } = useAuth()
   const [messages, setMessages] = useState([])
   const [allUsers, setAllUsers] = useState([])
+  const [groups, setGroups] = useState([])
   const [conversationsMap, setConversationsMap] = useState({})
-  const [selectedUser, setSelectedUser] = useState(null)
+  const [selectedChat, setSelectedChat] = useState(null)
   const [text, setText] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [usersLoading, setUsersLoading] = useState(true)
+  const [sidebarLoading, setSidebarLoading] = useState(true)
   const [error, setError] = useState('')
   const [sendError, setSendError] = useState('')
   const [sendOk, setSendOk] = useState('')
-  const [chatMode, setChatMode] = useState('individual')
-  const [groupId, setGroupId] = useState('')
   const bottomRef = useRef()
 
   useEffect(() => {
@@ -159,13 +177,15 @@ export default function ChatPage() {
 
     const load = async () => {
       try {
-        setUsersLoading(true)
-        const [usersRes, convsRes] = await Promise.all([
+        setSidebarLoading(true)
+        const [usersRes, convsRes, groupsRes] = await Promise.all([
           api.listUsers(token),
           api.getConversations(user.id, token),
+          api.getUserGroups(user.id, token),
         ])
         if (cancelled) return
         setAllUsers(usersRes.users || [])
+        setGroups(groupsRes.groups || [])
         const map = {}
         for (const c of (convsRes.conversations || [])) {
           map[c.user_id] = c
@@ -174,7 +194,7 @@ export default function ChatPage() {
       } catch (e) {
         if (!cancelled) setError(e.message)
       } finally {
-        if (!cancelled) setUsersLoading(false)
+        if (!cancelled) setSidebarLoading(false)
       }
     }
 
@@ -182,59 +202,71 @@ export default function ChatPage() {
     return () => { cancelled = true }
   }, [user?.id, token])
 
-  const loadMessages = async (otherUserId) => {
-    if (!user?.id || !otherUserId) return
+  const loadMessages = async (chat) => {
+    if (!user?.id || !chat) return
     try {
-      const res = await api.getConversation(user.id, otherUserId, token)
-      setMessages(res.messages || [])
+      if (chat.type === 'user') {
+        const res = await api.getConversation(user.id, chat.id, token)
+        setMessages(res.messages || [])
+      } else {
+        const res = await api.getGroupMessages(chat.id, token)
+        setMessages(res.messages || [])
+      }
     } catch (e) {
       setError(e.message)
     }
   }
 
   useEffect(() => {
-    if (selectedUser) {
-      loadMessages(selectedUser.id)
+    if (selectedChat) {
+      loadMessages(selectedChat)
     } else {
       setMessages([])
     }
-  }, [selectedUser])
+  }, [selectedChat])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSelectUser = (u) => {
-    setSelectedUser(u)
+  const refreshSidebar = async () => {
+    if (!user?.id) return
+    try {
+      const [convsRes, groupsRes] = await Promise.all([
+        api.getConversations(user.id, token),
+        api.getUserGroups(user.id, token),
+      ])
+      setGroups(groupsRes.groups || [])
+      const map = {}
+      for (const c of (convsRes.conversations || [])) {
+        map[c.user_id] = c
+      }
+      setConversationsMap({ ...map })
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
   const sendMessage = async () => {
-    if (chatMode === 'individual') {
-      if (!text.trim() || !password || !selectedUser) {
-        setSendError('Escribe un mensaje, tu password y selecciona un destinatario')
-        return
-      }
-    } else {
-      if (!text.trim() || !password || !groupId) {
-        setSendError('Escribe un mensaje, tu password y el ID del grupo')
-        return
-      }
+    if (!text.trim() || !password || !selectedChat) {
+      setSendError('Escribe un mensaje, tu password y selecciona un destinatario')
+      return
     }
     setSendError('')
     setSendOk('')
     setLoading(true)
     try {
-      if (chatMode === 'individual') {
+      if (selectedChat.type === 'user') {
         await api.sendMessage({
           sender: user.id,
-          recipient: selectedUser.id,
+          recipient: selectedChat.id,
           message: text,
           sender_password: password,
         }, token)
       } else {
         await api.sendGroupMessage({
           sender: user.id,
-          recipient: parseInt(groupId),
+          recipient: selectedChat.id,
           message: text,
           sender_password: password,
         }, token)
@@ -242,13 +274,8 @@ export default function ChatPage() {
       setSendOk('\u2713 Mensaje enviado')
       setText('')
       setTimeout(() => setSendOk(''), 2500)
-      await loadMessages(selectedUser.id)
-      const convsRes = await api.getConversations(user.id, token)
-      const map = {}
-      for (const c of (convsRes.conversations || [])) {
-        map[c.user_id] = c
-      }
-      setConversationsMap({ ...map })
+      await loadMessages(selectedChat)
+      await refreshSidebar()
     } catch (e) {
       setSendError(e.message)
     }
@@ -278,39 +305,39 @@ export default function ChatPage() {
     try {
       await api.deleteMessage(msgId, token)
       setMessages(prev => prev.filter(m => m.id !== msgId))
-      const convsRes = await api.getConversations(user.id, token)
-      const map = {}
-      for (const c of (convsRes.conversations || [])) {
-        map[c.user_id] = c
-      }
-      setConversationsMap({ ...map })
+      await refreshSidebar()
     } catch (e) {
       setError(e.message)
     }
   }
 
-  const recipientLabel = selectedUser
-    ? `${selectedUser.name} (${selectedUser.email})`
+  const chatLabel = selectedChat
+    ? selectedChat.type === 'user'
+      ? `${selectedChat.name} (${selectedChat.email})`
+      : `${selectedChat.name} (Grupo)`
     : 'Ninguno'
 
   return (
     <div className="chat-page">
-      <UserList
+      <Sidebar
         users={allUsers}
+        groups={groups}
         conversationsMap={conversationsMap}
-        selectedId={selectedUser?.id}
-        onSelect={handleSelectUser}
-        loading={usersLoading}
+        selectedChat={selectedChat}
+        onSelect={setSelectedChat}
+        loading={sidebarLoading}
       />
       <div className="chat-main">
-        {selectedUser ? (
+        {selectedChat ? (
           <>
             <div className="chat-header">
               <div className="chat-header-info">
-                <h2>{selectedUser.name}</h2>
-                <span className="chat-subtitle">{selectedUser.email}</span>
+                <h2>{selectedChat.name}</h2>
+                <span className="chat-subtitle">
+                  {selectedChat.type === 'user' ? selectedChat.email : 'Grupo'}
+                </span>
               </div>
-              <button className="refresh-btn" onClick={() => loadMessages(selectedUser.id)}>
+              <button className="refresh-btn" onClick={() => loadMessages(selectedChat)}>
                 {'\u21bb'} Actualizar
               </button>
             </div>
@@ -321,7 +348,7 @@ export default function ChatPage() {
               {messages.length === 0 ? (
                 <div className="empty-chat">
                   <div className="empty-icon">{'\u{1f513}'}</div>
-                  <p>No hay mensajes con {selectedUser.name}</p>
+                  <p>No hay mensajes con {selectedChat.name}</p>
                   <span>Env&iacute;a el primer mensaje cifrado</span>
                 </div>
               ) : (
@@ -343,44 +370,16 @@ export default function ChatPage() {
               {sendError && <div className="send-error">{sendError}</div>}
               {sendOk && <div className="send-ok">{sendOk}</div>}
 
-              <div className="mode-toggle">
-                <button
-                  className={chatMode === 'individual' ? 'active' : ''}
-                  onClick={() => setChatMode('individual')}
-                >
-                  {'\u{1f464}'} Individual
-                </button>
-                <button
-                  className={chatMode === 'group' ? 'active' : ''}
-                  onClick={() => setChatMode('group')}
-                >
-                  {'\u{1f465}'} Grupo
-                </button>
-              </div>
-
               <div className="input-row">
-                {chatMode === 'individual' ? (
-                  <div className="chat-field recipient-field">
-                    <span>Para:</span>
-                    <input
-                      className="recipient-input"
-                      type="text"
-                      value={recipientLabel}
-                      disabled
-                    />
-                  </div>
-                ) : (
-                  <div className="chat-field recipient-field">
-                    <span>Grupo ID</span>
-                    <input
-                      className="recipient-input"
-                      type="number"
-                      placeholder="ID grupo"
-                      value={groupId}
-                      onChange={e => setGroupId(e.target.value)}
-                    />
-                  </div>
-                )}
+                <div className="chat-field recipient-field">
+                  <span>Para:</span>
+                  <input
+                    className="recipient-input"
+                    type="text"
+                    value={chatLabel}
+                    disabled
+                  />
+                </div>
                 <div className="chat-field password-field">
                   <span>Password</span>
                   <input
@@ -410,8 +409,8 @@ export default function ChatPage() {
         ) : (
           <div className="chat-no-selection">
             <div className="no-sel-icon">{'\u{1f4ec}'}</div>
-            <p>Selecciona un usuario</p>
-            <span>Elige a qui&eacute;n escribirle en la barra lateral</span>
+            <p>Selecciona un usuario o grupo</p>
+            <span>Elige en la barra lateral con qui&eacute;n chatear</span>
           </div>
         )}
       </div>

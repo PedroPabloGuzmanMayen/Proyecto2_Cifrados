@@ -56,6 +56,12 @@ export const api = {
     fetch(`${BASE}/group_message`, { method: 'POST', headers: headers(token), body: JSON.stringify(body) }).then(handle),
 
   // Groups
+  getUserGroups: (userId, token) =>
+    fetch(`${BASE}/users/${userId}/groups`, { headers: headers(token) }).then(handle),
+
+  getGroupMessages: (groupId, token) =>
+    fetch(`${BASE}/groups/${groupId}/messages`, { headers: headers(token) }).then(handle),
+
   createGroup: (body, token) =>
     fetch(`${BASE}/groups`, { method: 'POST', headers: headers(token), body: JSON.stringify(body) }).then(handle),
 

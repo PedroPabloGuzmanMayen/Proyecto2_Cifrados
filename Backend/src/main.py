@@ -660,6 +660,37 @@ def agregar_miembro(group_id: int, body: AgregarMiembro, payload: dict = Depends
 
     return {"ok": True, "group_id": group_id, "user_id": body.user_id}
 
+
+@app.get("/groups/{group_id}/messages")
+def get_group_messages_for_group(group_id: int, payload: dict = Depends(verificar_token)):
+    user_id = int(payload["sub"])
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM group_members WHERE id_group = %s AND id_user = %s;",
+            (group_id, user_id),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=403, detail="No eres miembro de este grupo")
+
+        cur.execute(
+            """
+            SELECT m.id, m.sender_id, u.name AS sender_name,
+                   m.group_id, g.name AS group_name,
+                   m.ciphertext, m.encrypted_key, m.nonce, m.auth_tag,
+                   m.created_at
+            FROM messages m
+            JOIN users u ON u.id = m.sender_id
+            JOIN groups g ON g.id = m.group_id
+            WHERE m.group_id = %s AND (m.recipient_id = %s OR m.sender_id = %s)
+            ORDER BY m.created_at ASC;
+            """,
+            (group_id, user_id, user_id),
+        )
+        rows = cur.fetchall()
+    return {"group_id": group_id, "messages": rows}
+
+
 @app.get("/users")
 def list_users(payload: dict = Depends(verificar_token)):
     current_user_id = int(payload["sub"])
