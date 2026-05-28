@@ -75,7 +75,7 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify, onDelete }) {
         {asking && (
           <div className="bubble-pwd-form">
             <input
-              type="password" placeholder="Tu contrase\u00f1a" value={pwd}
+              type="password" placeholder="Tu contraseña" value={pwd}
               onChange={e => setPwd(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (asking === 'decrypt' ? doDecrypt() : doVerify())}
             />
