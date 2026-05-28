@@ -42,11 +42,7 @@ function MessageBubble({ msg, currentUserId, onDecrypt, onVerify, onDelete }) {
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
       >
-        {isMine && !decrypted ? (
-          <div className="bubble-text sent-indicator">
-            <span>&#x2713; Enviado</span>
-          </div>
-        ) : decrypted ? (
+        {decrypted ? (
           <div className="bubble-text decrypted">
             <span className="decrypted-tag">&#x1f513;</span>
             {decrypted}

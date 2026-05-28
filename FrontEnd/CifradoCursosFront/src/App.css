@@ -339,7 +339,7 @@ input:focus {
 
 /* ── CHAT PAGE ──────────────────────────────────────── */
 
-.chat-page { display: flex; height: 100%; overflow: hidden; }
+.chat-page { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
 /* ── Conversation List ─────────────────────────────── */
 
@@ -350,7 +350,7 @@ input:focus {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .conv-list-header {
