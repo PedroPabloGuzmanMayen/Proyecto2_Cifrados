@@ -70,22 +70,16 @@ def verificar_token(token: str = Depends(oauth2_scheme)) -> dict:
 
 
 # ─── Conexión ────────────────────────────────────────────────────────────────
-_conn = None
-
-
 def get_conn():
-    global _conn
-    if _conn is None or _conn.closed:
-        _conn = psycopg.connect(
-            host=os.getenv("POSTGRES_HOST"),
-            port=os.getenv("POSTGRES_PORT"),
-            dbname=os.getenv("POSTGRES_DB"),
-            user=os.getenv("POSTGRES_USER"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            sslmode="require",
-            row_factory=dict_row,
-        )
-    return _conn
+    return psycopg.connect(
+        host=os.getenv("POSTGRES_HOST"),
+        port=os.getenv("POSTGRES_PORT"),
+        dbname=os.getenv("POSTGRES_DB"),
+        user=os.getenv("POSTGRES_USER"),
+        password=os.getenv("POSTGRES_PASSWORD"),
+        sslmode="require",
+        row_factory=dict_row,
+    )
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -667,7 +661,7 @@ def get_group_messages_for_group(group_id: int, payload: dict = Depends(verifica
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id FROM group_members WHERE id_group = %s AND id_user = %s;",
+            "SELECT * FROM group_members WHERE id_group = %s AND id_user = %s;",
             (group_id, user_id),
         )
         if not cur.fetchone():
