@@ -676,7 +676,7 @@ def get_group_messages_for_group(group_id: int, payload: dict = Depends(verifica
             FROM messages m
             JOIN users u ON u.id = m.sender_id
             JOIN groups g ON g.id = m.group_id
-            WHERE m.group_id = %s AND (m.recipient_id = %s OR m.sender_id = %s)
+            WHERE m.group_id = %s AND (m.recipient_id = %s)
             ORDER BY m.created_at ASC;
             """,
             (group_id, user_id, user_id),
