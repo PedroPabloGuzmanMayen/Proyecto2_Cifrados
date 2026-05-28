@@ -63,3 +63,16 @@ VALUES (
     ''
 )
 ON CONFLICT (id) DO NOTHING;
+
+
+
+UPDATE blockchain
+SET hash = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+WHERE block_index = 0;
+
+UPDATE blockchain
+SET hash = '66e520c11c426b1aaadc9bfcf3c7e7f6a291ceefcf7e14dd4f098ff15a2f22e9'
+WHERE block_index = 0;
+
+
+ 66e520c11c426b1aaadc9bfcf3c7e7f6a291ceefcf7e14dd4f098ff15a2f22e9

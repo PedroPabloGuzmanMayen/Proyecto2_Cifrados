@@ -64,6 +64,23 @@ export const api = {
       method: 'POST', headers: headers(token), body: JSON.stringify({ user_id: userId }),
     }).then(handle),
 
+  // Conversations
+  getConversations: (userId, token) =>
+    fetch(`${BASE}/messages/${userId}/conversations`, { headers: headers(token) }).then(handle),
+
+  getConversation: (userId, otherUserId, token) =>
+    fetch(`${BASE}/messages/${userId}/conversation/${otherUserId}`, { headers: headers(token) }).then(handle),
+
+  deleteMessage: (messageId, token) =>
+    fetch(`${BASE}/messages/${messageId}`, { method: 'DELETE', headers: headers(token) }).then(handle),
+
+  // Users
+  listUsers: (token) =>
+    fetch(`${BASE}/users`, { headers: headers(token) }).then(handle),
+
+  getMe: (token) =>
+    fetch(`${BASE}/users/me`, { headers: headers(token) }).then(handle),
+
   // Blockchain
   verifyBlockchain: (token) =>
     fetch(`${BASE}/blockchain/verify`, { headers: headers(token) }).then(handle),

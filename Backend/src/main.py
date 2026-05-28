@@ -660,6 +660,113 @@ def agregar_miembro(group_id: int, body: AgregarMiembro, payload: dict = Depends
 
     return {"ok": True, "group_id": group_id, "user_id": body.user_id}
 
+@app.get("/users")
+def list_users(payload: dict = Depends(verificar_token)):
+    current_user_id = int(payload["sub"])
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, email FROM users WHERE id != %s ORDER BY name ASC;",
+            (current_user_id,),
+        )
+        rows = cur.fetchall()
+    return {"users": rows}
+
+
+@app.get("/users/me")
+def get_me(payload: dict = Depends(verificar_token)):
+    user_id = int(payload["sub"])
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name, email, created_at FROM users WHERE id = %s;", (user_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return row
+
+
+@app.get("/messages/{user_id}/conversation/{other_user_id}")
+def get_conversation(user_id: int, other_user_id: int, payload: dict = Depends(verificar_token)):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.id, m.sender_id, u.name AS sender_name,
+                   m.ciphertext, m.encrypted_key, m.nonce, m.auth_tag,
+                   m.created_at
+            FROM messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE (m.recipient_id = %s AND m.sender_id = %s AND m.group_id IS NULL)
+               OR (m.recipient_id = %s AND m.sender_id = %s AND m.group_id IS NULL)
+            ORDER BY m.created_at ASC;
+            """,
+            (user_id, other_user_id, other_user_id, user_id),
+        )
+        rows = cur.fetchall()
+    return {"user_id": user_id, "other_user_id": other_user_id, "messages": rows}
+
+
+@app.get("/messages/{user_id}/conversations")
+def get_conversations(user_id: int, payload: dict = Depends(verificar_token)):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                partner.id AS user_id,
+                partner.name AS user_name,
+                partner.email AS user_email,
+                latest.id AS last_msg_id,
+                latest.sender_id AS last_sender_id,
+                latest.ciphertext AS last_ciphertext,
+                latest.created_at AS last_created_at
+            FROM (
+                SELECT DISTINCT
+                    CASE WHEN m.sender_id = %s THEN m.recipient_id ELSE m.sender_id END AS partner_id
+                FROM messages m
+                WHERE (m.sender_id = %s OR m.recipient_id = %s) AND m.group_id IS NULL
+            ) p
+            JOIN LATERAL (
+                SELECT id, sender_id, ciphertext, created_at
+                FROM messages
+                WHERE ((sender_id = %s AND recipient_id = p.partner_id) OR (sender_id = p.partner_id AND recipient_id = %s))
+                  AND group_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) latest ON TRUE
+            JOIN users partner ON partner.id = p.partner_id
+            ORDER BY latest.created_at DESC;
+            """,
+            (user_id, user_id, user_id, user_id, user_id),
+        )
+        rows = cur.fetchall()
+    return {"user_id": user_id, "conversations": rows}
+
+
+@app.delete("/messages/{message_id}")
+def delete_message(message_id: int, payload: dict = Depends(verificar_token)):
+    user_id = int(payload["sub"])
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, sender_id, recipient_id FROM messages WHERE id = %s;",
+            (message_id,),
+        )
+        msg = cur.fetchone()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Mensaje no encontrado")
+    if msg["sender_id"] != user_id and msg["recipient_id"] != user_id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para eliminar este mensaje")
+    # Soft delete: mark as deleted
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM messages WHERE id = %s;",
+            (message_id,),
+        )
+        conn.commit()
+    return {"ok": True, "detail": "Mensaje eliminado"}
+
+
 # Módulo 4: MFA
 class MFAEnableRequest(BaseModel):
     pass
